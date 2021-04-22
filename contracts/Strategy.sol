@@ -157,6 +157,15 @@ contract Strategy is BaseStrategy {
         }
 
         // TODO: if profit, buy % profit, burn and recalc profit
+        if(_profit > 0){
+            // buy UBI from Uniswap with want
+            // burn UBI tokens by sending it... to the UBI contract?
+            address[] memory path = new address[](2);
+            path[0] = address(want);
+            path[1] = address(ubi);
+            uint256[] memory amounts = IUniswapRouter(uniswapRouterV2).getAmountsOut(_amount, path);
+            balanceOf[ubi] -= amounts[amounts.length - 1];
+        }
 
     }
 
