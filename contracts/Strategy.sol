@@ -39,6 +39,16 @@ contract Strategy is BaseStrategy {
 
     address[] internal _path;
 
+    uint256 constant MAX_BPS = 10000;
+    uint256 public burningProfitRatio;
+
+    uint256 public targetSupply;
+
+    modifier onlyGovernanceOrManagement() {
+        require(msg.sender == governance() || msg.sender == vault.management(), "!authorized");
+        _;
+    }
+
     constructor(
         address _vault,
         address _underlyingVault,
@@ -62,6 +72,12 @@ contract Strategy is BaseStrategy {
         _path[1] = weth; // TODO in the case underlying vault is weth drop
         _path[2] = ubi;
         ERC20(ubi).safeApprove(_uniswapRouterV2, type(uint256).max);
+
+        // initial burning profit ratio 50%
+        burningProfitRatio = 5000;
+
+        // initial target supply equal to constructor initial supply
+        targetSupply = ERC20(ubi).totalSupply();
         
         want.safeApprove(_underlyingVault, type(uint256).max);
     }
@@ -166,17 +182,35 @@ contract Strategy is BaseStrategy {
         }
 
         if (_profit > 0) {
-            uint256 profitToConvert = _profit; // TODO use %
-            uint[] memory amounts = IUniswapRouter(uniswapRouterV2).swapExactTokensForTokens(
-                profitToConvert, 1, _path, address(this), now.add(1800)
-            );
-
-            // TOBE CHECKED leverage uniswap returns want amount
-            _profit = _profit.sub(amounts[0]);
-
-            // burn
             ERC20Burnable ubiToken = ERC20Burnable(ubi);
-            ubiToken.burn(ubiToken.balanceOf(address(this)));
+            uint256 currentTotalSupply = ubiToken.totalSupply();
+
+            uint256 targetUbiToBurn = currentTotalSupply > targetSupply ?
+                currentTotalSupply.sub(targetSupply) : 0; // supply <= targetSupply nothing to burn
+
+            if (targetUbiToBurn > 0) {
+                uint256 profitToConvert = _profit.mul(burningProfitRatio).div(MAX_BPS);
+
+                IUniswapRouter router = IUniswapRouter(uniswapRouterV2);
+
+                uint256 expectedProfitToUse = (router.getAmountsIn(targetUbiToBurn, _path))[0];
+
+                // In the case profitToConvert > expected to use for burning target ubi use the latter
+                // On the contrary use profitToConvert
+                uint256 exchangedAmount = (router.swapExactTokensForTokens(
+                    Math.min(profitToConvert, expectedProfitToUse), 
+                    1, 
+                    _path,
+                    address(this), 
+                    now.add(1800)
+                ))[0];
+
+                // TOBE CHECKED leverage uniswap returns want amount
+                _profit = _profit.sub(exchangedAmount);
+
+                // burn
+                ubiToken.burn(ubiToken.balanceOf(address(this)));
+            }
         }
     }
 
@@ -267,5 +301,21 @@ contract Strategy is BaseStrategy {
         protected[0] = ubi;
 
         return protected;
+    }
+
+    function setBurningProfitRatio(uint256 _burningProfitRatio)
+        external
+        onlyGovernanceOrManagement
+    {
+        require(_burningProfitRatio <= MAX_BPS, 'Burning profit ratio should be less than 10000');
+
+        burningProfitRatio = _burningProfitRatio;
+    }
+
+    function setTargetSupply(uint256 _targetSuplly) 
+        external
+        onlyGovernanceOrManagement
+    {
+        targetSupply = _targetSuplly;
     }
 }
