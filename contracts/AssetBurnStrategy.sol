@@ -41,7 +41,10 @@ contract AssetBurnStrategy is BaseStrategy {
     uint256 public targetSupply;
 
     modifier onlyGovernanceOrManagement() {
-        require(msg.sender == governance() || msg.sender == vault.management(), "!authorized");
+        require(
+            msg.sender == governance() || msg.sender == vault.management(),
+            "!authorized"
+        );
         _;
     }
 
@@ -74,7 +77,7 @@ contract AssetBurnStrategy is BaseStrategy {
 
         // initial target supply equal to constructor initial supply
         targetSupply = ERC20(asset).totalSupply();
-        
+
         want.safeApprove(_underlyingVault, type(uint256).max);
     }
 
@@ -82,7 +85,10 @@ contract AssetBurnStrategy is BaseStrategy {
 
     function name() external view override returns (string memory) {
         // Add your own name here, suggestion e.g. "StrategyCreamYFI"
-        return string(abi.encodePacked("StrategyUbi", ERC20(address(want)).symbol()));
+        return
+            string(
+                abi.encodePacked("StrategyUbi", ERC20(address(want)).symbol())
+            );
     }
 
     /**
@@ -100,7 +106,7 @@ contract AssetBurnStrategy is BaseStrategy {
      *  The amount of assets this strategy manages that should not be included in Yearn's Total Value
      *  Locked (TVL) calculation across it's ecosystem.
      */
-    function delegatedAssets() external override view returns (uint256) {
+    function delegatedAssets() external view override returns (uint256) {
         return _balanceOnUnderlyingVault();
     }
 
@@ -113,9 +119,11 @@ contract AssetBurnStrategy is BaseStrategy {
     }
 
     function _balanceOnUnderlyingVault() internal view returns (uint256) {
-        return underlyingVault.balanceOf(address(this))
-            .mul(underlyingVault.pricePerShare())
-            .div(10**underlyingVault.decimals());
+        return
+            underlyingVault
+                .balanceOf(address(this))
+                .mul(underlyingVault.pricePerShare())
+                .div(10**underlyingVault.decimals());
     }
 
     function ethToWant(uint256 _amount) internal view returns (uint256) {
@@ -126,11 +134,11 @@ contract AssetBurnStrategy is BaseStrategy {
         address[] memory path = new address[](2);
         path[0] = address(weth);
         path[1] = address(want);
-        uint256[] memory amounts = IUniswapRouter(uniswapRouterV2).getAmountsOut(_amount, path);
+        uint256[] memory amounts =
+            IUniswapRouter(uniswapRouterV2).getAmountsOut(_amount, path);
 
         return amounts[amounts.length - 1];
     }
-
 
     function prepareReturn(uint256 _debtOutstanding)
         internal
@@ -150,7 +158,7 @@ contract AssetBurnStrategy is BaseStrategy {
         uint256 wantBalance = _balanceOfWant();
 
         // Calculate total profit w/o farming
-        if (debt < currentValue){
+        if (debt < currentValue) {
             _profit = currentValue.sub(debt);
         } else {
             _loss = debt.sub(currentValue);
@@ -166,7 +174,8 @@ contract AssetBurnStrategy is BaseStrategy {
             (uint256 _liquidatedAmount, ) = liquidatePosition(toFree);
 
             // loss in the case freedAmount less to be freed
-            uint256 withdrawalLoss = _liquidatedAmount < toFree ? toFree.sub(_liquidatedAmount) : 0;
+            uint256 withdrawalLoss =
+                _liquidatedAmount < toFree ? toFree.sub(_liquidatedAmount) : 0;
 
             // profit recalc
             if (withdrawalLoss < _profit) {
@@ -181,25 +190,32 @@ contract AssetBurnStrategy is BaseStrategy {
             ERC20Burnable assetToken = ERC20Burnable(asset);
             uint256 currentTotalSupply = assetToken.totalSupply();
 
-            uint256 targetAssetToBurn = currentTotalSupply > targetSupply ?
-                currentTotalSupply.sub(targetSupply) : 0; // supply <= targetSupply nothing to burn
+            uint256 targetAssetToBurn =
+                currentTotalSupply > targetSupply
+                    ? currentTotalSupply.sub(targetSupply)
+                    : 0; // supply <= targetSupply nothing to burn
 
             if (targetAssetToBurn > 0) {
-                uint256 profitToConvert = _profit.mul(burningProfitRatio).div(MAX_BPS);
+                uint256 profitToConvert =
+                    _profit.mul(burningProfitRatio).div(MAX_BPS);
 
                 IUniswapRouter router = IUniswapRouter(uniswapRouterV2);
 
-                uint256 expectedProfitToUse = (router.getAmountsIn(targetAssetToBurn, _path))[0];
+                uint256 expectedProfitToUse =
+                    (router.getAmountsIn(targetAssetToBurn, _path))[0];
 
                 // In the case profitToConvert > expected to use for burning target asset use the latter
                 // On the contrary use profitToConvert
-                uint256 exchangedAmount = (router.swapExactTokensForTokens(
-                    Math.min(profitToConvert, expectedProfitToUse), 
-                    1, 
-                    _path,
-                    address(this), 
-                    now.add(1800)
-                ))[0];
+                uint256 exchangedAmount =
+                    (
+                        router.swapExactTokensForTokens(
+                            Math.min(profitToConvert, expectedProfitToUse),
+                            1,
+                            _path,
+                            address(this),
+                            now.add(1800)
+                        )
+                    )[0];
 
                 // TOBE CHECKED leverage uniswap returns want amount
                 _profit = _profit.sub(exchangedAmount);
@@ -209,14 +225,13 @@ contract AssetBurnStrategy is BaseStrategy {
             }
         }
 
-
         // Recalculate profit
         wantBalance = want.balanceOf(address(this));
 
         if (wantBalance < _profit) {
             _profit = wantBalance;
             _debtPayment = 0;
-        } else if (wantBalance < _debtPayment.add(_profit)){
+        } else if (wantBalance < _debtPayment.add(_profit)) {
             _debtPayment = wantBalance.sub(_profit);
         } else {
             _debtPayment = _debtOutstanding;
@@ -226,7 +241,7 @@ contract AssetBurnStrategy is BaseStrategy {
     function adjustPosition(uint256 _debtOutstanding) internal override {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
-    
+
         //emergency exit is dealt with in prepareReturn
         if (emergencyExit) {
             return;
@@ -250,12 +265,16 @@ contract AssetBurnStrategy is BaseStrategy {
         if (balanceOfWant < _amountNeeded) {
             uint256 amountToRedeem = _amountNeeded.sub(balanceOfWant);
 
-            uint256 valueToRedeemApprox = amountToRedeem.mul(10**underlyingVault.decimals()).div(underlyingVault.pricePerShare());
-            uint256 valueToRedeem = Math.min(
-                valueToRedeemApprox,
-                underlyingVault.balanceOf(address(this))
-            );
-            
+            uint256 valueToRedeemApprox =
+                amountToRedeem.mul(10**underlyingVault.decimals()).div(
+                    underlyingVault.pricePerShare()
+                );
+            uint256 valueToRedeem =
+                Math.min(
+                    valueToRedeemApprox,
+                    underlyingVault.balanceOf(address(this))
+                );
+
             underlyingVault.withdraw(valueToRedeem);
         }
 
@@ -272,18 +291,26 @@ contract AssetBurnStrategy is BaseStrategy {
 
     // NOTE: Can override `tendTrigger` and `harvestTrigger` if necessary
 
-    function harvestTrigger(uint256 callCost) public view override returns (bool) {
+    function harvestTrigger(uint256 callCost)
+        public
+        view
+        override
+        returns (bool)
+    {
         return super.harvestTrigger(ethToWant(callCost));
     }
 
     function prepareMigration(address _newStrategy) internal override {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
-    
+
         underlyingVault.withdraw();
 
         ERC20 assetToken = ERC20(asset);
-        assetToken.safeTransfer(_newStrategy, assetToken.balanceOf(address(this)));
+        assetToken.safeTransfer(
+            _newStrategy,
+            assetToken.balanceOf(address(this))
+        );
     }
 
     // Override this to add all tokens/tokenized positions this contract manages
@@ -316,12 +343,15 @@ contract AssetBurnStrategy is BaseStrategy {
         external
         onlyGovernanceOrManagement
     {
-        require(_burningProfitRatio <= MAX_BPS, 'Burning profit ratio should be less than 10000');
+        require(
+            _burningProfitRatio <= MAX_BPS,
+            "Burning profit ratio should be less than 10000"
+        );
 
         burningProfitRatio = _burningProfitRatio;
     }
 
-    function setTargetSupply(uint256 _targetSuplly) 
+    function setTargetSupply(uint256 _targetSuplly)
         external
         onlyGovernanceOrManagement
     {
