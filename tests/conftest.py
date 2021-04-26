@@ -43,21 +43,34 @@ def token():
     token_address = "0x6b175474e89094c44da98b954eedeac495271d0f"  # this should be the address of the ERC-20 used by the strategy/vault (DAI)
     yield Contract(token_address)
 
+@pytest.fixture
+def transferAmount(accounts, token):
+    def t(user, amount):
+        reserve = accounts.at("0xd551234ae421e3bcba99a0da6d736074f22192ff", force=True)
+        token.transfer(user, amount, {"from": reserve})
+        return amount
+    yield t
 
 @pytest.fixture
-def amount(accounts, token, user):
+def amount(transferAmount, token, user):
     amount = 10_000 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
-    reserve = accounts.at("0xd551234ae421e3bcba99a0da6d736074f22192ff", force=True)
-    token.transfer(user, amount, {"from": reserve})
-    yield amount
+    yield transferAmount(user, amount)
 
 
 @pytest.fixture
 def weth():
     token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
     yield Contract(token_address)
+
+@pytest.fixture
+def ubi():
+    yield Contract("0xDd1Ad9A21Ce722C151A836373baBe42c868cE9a4")
+
+@pytest.fixture
+def uniswapRouter():
+    yield Contract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
 
 
 @pytest.fixture
@@ -78,12 +91,26 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, Strategy, gov):
-    strategy = strategist.deploy(AssetBurnStrategy, vault)
+def underlyingVault(pm, gov, rewards, guardian, management, token):
+    Vault = pm(config["dependencies"][0]).Vault
+    vault = guardian.deploy(Vault)
+    vault.initialize(token, gov, rewards, "", "", guardian)
+    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
+    vault.setManagement(management, {"from": gov})
+    yield vault
+
+@pytest.fixture
+def strategy(strategist, keeper, vault, strategyDeployer, gov):
+    strategy = strategyDeployer(vault)
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
     yield strategy
 
+@pytest.fixture
+def strategyDeployer(strategist, underlyingVault, weth, uniswapRouter, ubi, AssetBurnStrategy, gov):
+    def s(vault):
+        return strategist.deploy(AssetBurnStrategy, vault, underlyingVault, ubi, weth, uniswapRouter)
+    yield s
 
 @pytest.fixture(scope="session")
 def RELATIVE_APPROX():
