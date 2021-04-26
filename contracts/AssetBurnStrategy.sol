@@ -23,17 +23,13 @@ import "@openzeppelin/contracts/math/Math.sol";
 
 import "../interfaces/Uniswap/IUniswapRouter.sol";
 
-
-// Import interfaces for many popular DeFi projects, or add your own!
-//import "../interfaces/<protocol>/<Interface>.sol";
-
-contract Strategy is BaseStrategy {
+contract AssetBurnStrategy is BaseStrategy {
     using SafeERC20 for ERC20;
     using Address for address;
     using SafeMath for uint256;
 
     VaultAPI public underlyingVault;
-    address public ubi;
+    address public asset;
     address public weth;
     address public uniswapRouterV2;
 
@@ -52,7 +48,7 @@ contract Strategy is BaseStrategy {
     constructor(
         address _vault,
         address _underlyingVault,
-        address _ubi,
+        address _asset,
         address _weth,
         address _uniswapRouterV2
     ) public BaseStrategy(_vault) {
@@ -62,7 +58,7 @@ contract Strategy is BaseStrategy {
         // debtThreshold = 0;
 
         underlyingVault = VaultAPI(_underlyingVault);
-        ubi = _ubi;
+        asset = _asset;
 
         weth = _weth;
         uniswapRouterV2 = _uniswapRouterV2;
@@ -70,14 +66,14 @@ contract Strategy is BaseStrategy {
         _path = new address[](3);
         _path[0] = address(want);
         _path[1] = weth; // TODO in the case underlying vault is weth drop
-        _path[2] = ubi;
-        ERC20(ubi).safeApprove(_uniswapRouterV2, type(uint256).max);
+        _path[2] = asset;
+        ERC20(asset).safeApprove(_uniswapRouterV2, type(uint256).max);
 
         // initial burning profit ratio 50%
         burningProfitRatio = 5000;
 
         // initial target supply equal to constructor initial supply
-        targetSupply = ERC20(ubi).totalSupply();
+        targetSupply = ERC20(asset).totalSupply();
         
         want.safeApprove(_underlyingVault, type(uint256).max);
     }
@@ -119,7 +115,7 @@ contract Strategy is BaseStrategy {
     function _balanceOnUnderlyingVault() internal view returns (uint256) {
         return underlyingVault.balanceOf(address(this))
             .mul(underlyingVault.pricePerShare())
-            .div(underlyingVault.decimals());
+            .div(10**underlyingVault.decimals());
     }
 
     function ethToWant(uint256 _amount) internal view returns (uint256) {
@@ -182,20 +178,20 @@ contract Strategy is BaseStrategy {
         }
 
         if (_profit > 0) {
-            ERC20Burnable ubiToken = ERC20Burnable(ubi);
-            uint256 currentTotalSupply = ubiToken.totalSupply();
+            ERC20Burnable assetToken = ERC20Burnable(asset);
+            uint256 currentTotalSupply = assetToken.totalSupply();
 
-            uint256 targetUbiToBurn = currentTotalSupply > targetSupply ?
+            uint256 targetAssetToBurn = currentTotalSupply > targetSupply ?
                 currentTotalSupply.sub(targetSupply) : 0; // supply <= targetSupply nothing to burn
 
-            if (targetUbiToBurn > 0) {
+            if (targetAssetToBurn > 0) {
                 uint256 profitToConvert = _profit.mul(burningProfitRatio).div(MAX_BPS);
 
                 IUniswapRouter router = IUniswapRouter(uniswapRouterV2);
 
-                uint256 expectedProfitToUse = (router.getAmountsIn(targetUbiToBurn, _path))[0];
+                uint256 expectedProfitToUse = (router.getAmountsIn(targetAssetToBurn, _path))[0];
 
-                // In the case profitToConvert > expected to use for burning target ubi use the latter
+                // In the case profitToConvert > expected to use for burning target asset use the latter
                 // On the contrary use profitToConvert
                 uint256 exchangedAmount = (router.swapExactTokensForTokens(
                     Math.min(profitToConvert, expectedProfitToUse), 
@@ -209,8 +205,21 @@ contract Strategy is BaseStrategy {
                 _profit = _profit.sub(exchangedAmount);
 
                 // burn
-                ubiToken.burn(ubiToken.balanceOf(address(this)));
+                assetToken.burn(assetToken.balanceOf(address(this)));
             }
+        }
+
+
+        // Recalculate profit
+        wantBalance = want.balanceOf(address(this));
+
+        if (wantBalance < _profit) {
+            _profit = wantBalance;
+            _debtPayment = 0;
+        } else if (wantBalance < _debtPayment.add(_profit)){
+            _debtPayment = wantBalance.sub(_profit);
+        } else {
+            _debtPayment = _debtOutstanding;
         }
     }
 
@@ -241,13 +250,13 @@ contract Strategy is BaseStrategy {
         if (balanceOfWant < _amountNeeded) {
             uint256 amountToRedeem = _amountNeeded.sub(balanceOfWant);
 
-            uint256 valueToRedeemApprox = amountToRedeem.mul(vault.decimals()).div(vault.pricePerShare());
+            uint256 valueToRedeemApprox = amountToRedeem.mul(10**underlyingVault.decimals()).div(underlyingVault.pricePerShare());
             uint256 valueToRedeem = Math.min(
                 valueToRedeemApprox,
-                vault.balanceOf(address(this))
+                underlyingVault.balanceOf(address(this))
             );
             
-            vault.withdraw(valueToRedeem);
+            underlyingVault.withdraw(valueToRedeem);
         }
 
         // _liquidatedAmount min(_amountNeeded, balanceOfWant), otw vault accounting breaks
@@ -273,8 +282,8 @@ contract Strategy is BaseStrategy {
     
         underlyingVault.withdraw();
 
-        ERC20 ubiToken = ERC20(ubi);
-        ubiToken.safeTransfer(_newStrategy, ubiToken.balanceOf(address(this)));
+        ERC20 assetToken = ERC20(asset);
+        assetToken.safeTransfer(_newStrategy, assetToken.balanceOf(address(this)));
     }
 
     // Override this to add all tokens/tokenized positions this contract manages
@@ -298,7 +307,7 @@ contract Strategy is BaseStrategy {
     {
         address[] memory protected = new address[](1);
 
-        protected[0] = ubi;
+        protected[0] = asset;
 
         return protected;
     }
