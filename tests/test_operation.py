@@ -42,7 +42,16 @@ def test_emergency_exit(
 
 
 def test_profitable_harvest(
-    accounts, token, vault, strategy, user, strategist, amount, transferAmount, RELATIVE_APPROX, chain
+    accounts,
+    token,
+    vault,
+    strategy,
+    user,
+    strategist,
+    amount,
+    transferAmount,
+    RELATIVE_APPROX,
+    chain,
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -54,7 +63,7 @@ def test_profitable_harvest(
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    simualatedYield = 5_000*(10**token.decimals())
+    simualatedYield = 5_000 * (10 ** token.decimals())
     transferAmount(strategy.underlyingVault(), simualatedYield)
 
     before_pps = vault.pricePerShare()
