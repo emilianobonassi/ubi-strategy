@@ -70,10 +70,19 @@ contract AssetBurnStrategy is BaseStrategy {
         uniswapRouterV2 = _uniswapRouterV2;
         uniswapFactory = _uniswapFactory;
 
-        _path = new address[](3);
-        _path[0] = address(want);
-        _path[1] = weth; // TODO in the case underlying vault is weth drop
-        _path[2] = asset;
+        if (
+            address(want) == weth ||
+            address(want) == 0x6B175474E89094C44Da98b954EedeAC495271d0F
+        ) {
+            _path = new address[](2);
+            _path[0] = address(want);
+            _path[1] = asset;
+        } else {
+            _path = new address[](3);
+            _path[0] = address(want);
+            _path[1] = weth;
+            _path[2] = asset;
+        }
         ERC20(address(want)).safeApprove(_uniswapRouterV2, type(uint256).max);
 
         // initial burning profit ratio 50%
