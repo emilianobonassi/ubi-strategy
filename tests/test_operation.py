@@ -50,6 +50,7 @@ def test_profitable_harvest(
     strategist,
     amount,
     transferAmount,
+    ubi,
     RELATIVE_APPROX,
     chain,
 ):
@@ -63,19 +64,35 @@ def test_profitable_harvest(
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    simualatedYield = 5_000 * (10 ** token.decimals())
-    transferAmount(strategy.underlyingVault(), simualatedYield)
+    simulated = 5_000 * (10 ** token.decimals())
+    transferAmount(strategy.underlyingVault(), simulated)
 
     before_pps = vault.pricePerShare()
 
     # Harvest 2: Realize profit
-    strategy.harvest()
+    before_asset_supply = ubi.totalSupply()
+    tx = strategy.harvest()
     chain.sleep(3600 * 6)  # 6 hrs needed for profits to unlock
     chain.mine(1)
     profit = token.balanceOf(vault.address)  # Profits go to vault
 
     assert strategy.estimatedTotalAssets() + profit > amount
     assert vault.pricePerShare() > before_pps
+
+    # check swap the correct profit qty
+    swapEvents = tx.events["Swap"]
+    assert (
+        pytest.approx(swapEvents[0]["amount0In"], rel=RELATIVE_APPROX)
+        == strategy.burningProfitRatio() * simulated / 10_000
+        or pytest.approx(swapEvents[0]["amount1In"], rel=RELATIVE_APPROX)
+        == strategy.burningProfitRatio() * simulated / 10_000
+    )
+
+    # check burn the target asset qty
+    # only for weth and dai the path is shorter otw we have two swaps via weth, the last swap is the asset qty bought
+    assert swapEvents[tx.events.count("Swap") - 1]["amount1Out"] == (
+        before_asset_supply - ubi.totalSupply()
+    )
 
 
 def test_change_debt(
