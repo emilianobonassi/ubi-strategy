@@ -38,16 +38,32 @@ def keeper(accounts):
     yield accounts[5]
 
 
-@pytest.fixture
-def token():
-    token_address = "0x6b175474e89094c44da98b954eedeac495271d0f"  # this should be the address of the ERC-20 used by the strategy/vault (DAI)
-    yield Contract(token_address)
+@pytest.fixture(
+    params=["DAI", "SUSD", "USDC", "USDT", "WETH",]
+)
+def token(Token, request):
+    tokens = {
+        "DAI": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "SUSD": "0x57Ab1ec28D129707052df4dF418D58a2D46d5f51",
+        "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "WETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    }
+    yield Token.at(tokens[request.param])
 
 
 @pytest.fixture
 def transferAmount(accounts, token):
+    tokenWhales = {
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F": "0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE",
+        "0x57Ab1ec28D129707052df4dF418D58a2D46d5f51": "0x49BE88F0fcC3A8393a59d3688480d7D253C37D2A",
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "0xf977814e90da44bfa03b6295a0616a897441acec",
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x2f0b23f53734252bda2277357e97e1517d6b042a",
+    }
+
     def t(user, amount):
-        reserve = accounts.at("0xd551234ae421e3bcba99a0da6d736074f22192ff", force=True)
+        reserve = accounts.at(tokenWhales[token.address], force=True)
         token.transfer(user, amount, {"from": reserve})
         return amount
 
@@ -129,7 +145,7 @@ def strategyDeployer(
     AssetBurnStrategy,
     gov,
 ):
-    def s(vault):
+    def s(vault, proxy=True):
         strategy = strategist.deploy(
             AssetBurnStrategy,
             vault,
@@ -139,7 +155,24 @@ def strategyDeployer(
             uniswapRouter,
             uniswapFactory,
         )
+
+        if proxy:
+            tx = strategy.clone(
+                vault,
+                strategist,
+                underlyingVault,
+                ubi,
+                weth,
+                uniswapRouter,
+                uniswapFactory,
+            )
+
+            strategy = AssetBurnStrategy.at(
+                tx.events["Cloned"]["clone"], owner=strategist
+            )
+
         strategy.setTargetSupply(ubi.totalSupply() / 2, {"from": gov})
+
         return strategy
 
     yield s

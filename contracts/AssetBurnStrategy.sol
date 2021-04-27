@@ -260,7 +260,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
                 uint256 pairAssetBalance = assetToken.balanceOf(pair);
                 targetAssetToBurn = Math.min(
                     pairAssetBalance > 0
-                        ? pairAssetBalance.mul(99).div(100)
+                        ? pairAssetBalance.mul(50).div(100)
                         : 0,
                     targetAssetToBurn
                 );
@@ -427,5 +427,45 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         onlyGovernanceOrManagement
     {
         targetSupply = _targetSuplly;
+    }
+
+    function clone(
+        address _vault,
+        address _onBehalfOf,
+        address _underlyingVault,
+        address _asset,
+        address _weth,
+        address _uniswapRouterV2,
+        address _uniswapFactory
+    ) external returns (address newStrategy) {
+        // Copied from https://github.com/optionality/clone-factory/blob/master/contracts/CloneFactory.sol
+        bytes20 addressBytes = bytes20(address(this));
+
+        assembly {
+            // EIP-1167 bytecode
+            let clone_code := mload(0x40)
+            mstore(
+                clone_code,
+                0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000
+            )
+            mstore(add(clone_code, 0x14), addressBytes)
+            mstore(
+                add(clone_code, 0x28),
+                0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000
+            )
+            newStrategy := create(0, clone_code, 0x37)
+        }
+
+        AssetBurnStrategy(newStrategy).init(
+            _vault,
+            _onBehalfOf,
+            _underlyingVault,
+            _asset,
+            _weth,
+            _uniswapRouterV2,
+            _uniswapFactory
+        );
+
+        emit Cloned(newStrategy);
     }
 }
