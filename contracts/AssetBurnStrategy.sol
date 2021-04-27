@@ -7,7 +7,7 @@ pragma experimental ABIEncoderV2;
 
 // These are the core Yearn libraries
 import {
-    BaseStrategy,
+    BaseStrategyInitializable,
     StrategyParams,
     VaultAPI
 } from "@yearnvaults/contracts/BaseStrategy.sol";
@@ -24,7 +24,7 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "../interfaces/Uniswap/IUniswapRouter.sol";
 import "../interfaces/Uniswap/IUniswapFactory.sol";
 
-contract AssetBurnStrategy is BaseStrategy {
+contract AssetBurnStrategy is BaseStrategyInitializable {
     using SafeERC20 for ERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -57,11 +57,47 @@ contract AssetBurnStrategy is BaseStrategy {
         address _weth,
         address _uniswapRouterV2,
         address _uniswapFactory
-    ) public BaseStrategy(_vault) {
-        // You can set these parameters on deployment to whatever you want
-        // maxReportDelay = 6300;
-        // profitFactor = 100;
-        // debtThreshold = 0;
+    ) public BaseStrategyInitializable(_vault) {
+        _init(
+            _underlyingVault,
+            _asset,
+            _weth,
+            _uniswapRouterV2,
+            _uniswapFactory
+        );
+    }
+
+    function init(
+        address _vault,
+        address _onBehalfOf,
+        address _underlyingVault,
+        address _asset,
+        address _weth,
+        address _uniswapRouterV2,
+        address _uniswapFactory
+    ) external {
+        super._initialize(_vault, _onBehalfOf, _onBehalfOf, _onBehalfOf);
+
+        _init(
+            _underlyingVault,
+            _asset,
+            _weth,
+            _uniswapRouterV2,
+            _uniswapFactory
+        );
+    }
+
+    function _init(
+        address _underlyingVault,
+        address _asset,
+        address _weth,
+        address _uniswapRouterV2,
+        address _uniswapFactory
+    ) internal {
+        require(
+            address(want) == VaultAPI(_underlyingVault).token(),
+            "Vault want is different from the underlying vault token"
+        );
 
         underlyingVault = VaultAPI(_underlyingVault);
         asset = _asset;
