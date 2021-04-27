@@ -22,6 +22,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20Burnable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 
 import "../interfaces/Uniswap/IUniswapRouter.sol";
+import "../interfaces/Uniswap/IUniswapFactory.sol";
 
 contract AssetBurnStrategy is BaseStrategy {
     using SafeERC20 for ERC20;
@@ -32,6 +33,7 @@ contract AssetBurnStrategy is BaseStrategy {
     address public asset;
     address public weth;
     address public uniswapRouterV2;
+    address public uniswapFactory;
 
     address[] internal _path;
 
@@ -53,7 +55,8 @@ contract AssetBurnStrategy is BaseStrategy {
         address _underlyingVault,
         address _asset,
         address _weth,
-        address _uniswapRouterV2
+        address _uniswapRouterV2,
+        address _uniswapFactory
     ) public BaseStrategy(_vault) {
         // You can set these parameters on deployment to whatever you want
         // maxReportDelay = 6300;
@@ -65,12 +68,13 @@ contract AssetBurnStrategy is BaseStrategy {
 
         weth = _weth;
         uniswapRouterV2 = _uniswapRouterV2;
+        uniswapFactory = _uniswapFactory;
 
         _path = new address[](3);
         _path[0] = address(want);
         _path[1] = weth; // TODO in the case underlying vault is weth drop
         _path[2] = asset;
-        ERC20(asset).safeApprove(_uniswapRouterV2, type(uint256).max);
+        ERC20(address(want)).safeApprove(_uniswapRouterV2, type(uint256).max);
 
         // initial burning profit ratio 50%
         burningProfitRatio = 5000;
@@ -107,7 +111,8 @@ contract AssetBurnStrategy is BaseStrategy {
      *  Locked (TVL) calculation across it's ecosystem.
      */
     function delegatedAssets() external view override returns (uint256) {
-        return _balanceOnUnderlyingVault();
+        StrategyParams memory params = vault.strategies(address(this));
+        return Math.min(params.totalDebt, _balanceOnUnderlyingVault());
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
@@ -194,6 +199,27 @@ contract AssetBurnStrategy is BaseStrategy {
                 currentTotalSupply > targetSupply
                     ? currentTotalSupply.sub(targetSupply)
                     : 0; // supply <= targetSupply nothing to burn
+
+            if (targetAssetToBurn > 0) {
+                // Check we have sufficient liquidity
+                IUniswapV2Factory factory = IUniswapV2Factory(uniswapFactory);
+                address pair =
+                    factory.getPair(
+                        _path[_path.length - 2],
+                        _path[_path.length - 1]
+                    );
+
+                require(pair != address(0), "Pair must exist to swap");
+
+                // Buy at most to empty the pool
+                uint256 pairAssetBalance = assetToken.balanceOf(pair);
+                targetAssetToBurn = Math.min(
+                    pairAssetBalance > 0
+                        ? pairAssetBalance.mul(99).div(100)
+                        : 0,
+                    targetAssetToBurn
+                );
+            }
 
             if (targetAssetToBurn > 0) {
                 uint256 profitToConvert =

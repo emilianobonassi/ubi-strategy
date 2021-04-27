@@ -79,6 +79,11 @@ def uniswapRouter():
 
 
 @pytest.fixture
+def uniswapFactory():
+    yield Contract("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
+
+
+@pytest.fixture
 def weth_amout(user, weth):
     weth_amout = 10 ** weth.decimals()
     user.transfer(weth, weth_amout)
@@ -115,12 +120,27 @@ def strategy(strategist, keeper, vault, strategyDeployer, gov):
 
 @pytest.fixture
 def strategyDeployer(
-    strategist, underlyingVault, weth, uniswapRouter, ubi, AssetBurnStrategy, gov
+    strategist,
+    underlyingVault,
+    weth,
+    uniswapRouter,
+    uniswapFactory,
+    ubi,
+    AssetBurnStrategy,
+    gov,
 ):
     def s(vault):
-        return strategist.deploy(
-            AssetBurnStrategy, vault, underlyingVault, ubi, weth, uniswapRouter
+        strategy = strategist.deploy(
+            AssetBurnStrategy,
+            vault,
+            underlyingVault,
+            ubi,
+            weth,
+            uniswapRouter,
+            uniswapFactory,
         )
+        strategy.setTargetSupply(ubi.totalSupply() / 2, {"from": gov})
+        return strategy
 
     yield s
 
