@@ -131,11 +131,11 @@ def test_sweep(gov, vault, strategy, token, user, amount, weth, weth_amout):
     with brownie.reverts("!protected"):
         strategy.sweep(strategy.asset(), {"from": gov})
 
-    before_balance = weth.balanceOf(gov)
-    weth.transfer(strategy, weth_amout, {"from": user})
-    assert weth.address != strategy.want()
-    strategy.sweep(weth, {"from": gov})
-    assert weth.balanceOf(gov) == weth_amout + before_balance
+    if weth.address != strategy.want():
+        before_balance = weth.balanceOf(gov)
+        weth.transfer(strategy, weth_amout, {"from": user})
+        strategy.sweep(weth, {"from": gov})
+        assert weth.balanceOf(gov) == weth_amout + before_balance
 
 
 def test_triggers(
