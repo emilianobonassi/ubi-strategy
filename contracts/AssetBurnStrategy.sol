@@ -417,9 +417,10 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         override
         returns (address[] memory)
     {
-        address[] memory protected = new address[](1);
+        address[] memory protected = new address[](2);
 
         protected[0] = asset;
+        protected[1] = underlyingVault.token();
 
         return protected;
     }
