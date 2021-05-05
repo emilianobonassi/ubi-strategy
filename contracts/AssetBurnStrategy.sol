@@ -8,8 +8,7 @@ pragma experimental ABIEncoderV2;
 // These are the core Yearn libraries
 import {
     BaseStrategyInitializable,
-    StrategyParams,
-    VaultAPI
+    StrategyParams
 } from "@yearnvaults/contracts/BaseStrategy.sol";
 import {
     SafeERC20,
@@ -23,6 +22,8 @@ import "@openzeppelin/contracts/math/Math.sol";
 
 import "../interfaces/Uniswap/IUniswapRouter.sol";
 import "../interfaces/Uniswap/IUniswapFactory.sol";
+
+import {VaultAPI} from "../interfaces/VaultAPI.sol";
 
 contract AssetBurnStrategy is BaseStrategyInitializable {
     using SafeERC20 for ERC20;
@@ -41,6 +42,8 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
     uint256 public burningProfitRatio;
 
     uint256 public targetSupply;
+
+    uint256 public maxLossUnderlyingVault;
 
     modifier onlyGovernanceOrManagement() {
         require(
@@ -126,6 +129,9 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
 
         // initial target supply equal to constructor initial supply
         targetSupply = ERC20(asset).totalSupply();
+
+        // max loss during withdrawal from underlying vault
+        maxLossUnderlyingVault = 1;
 
         want.safeApprove(_underlyingVault, type(uint256).max);
     }
@@ -346,7 +352,11 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
                     underlyingVault.balanceOf(address(this))
                 );
 
-            underlyingVault.withdraw(valueToRedeem);
+            underlyingVault.withdraw(
+                valueToRedeem,
+                address(this),
+                maxLossUnderlyingVault
+            );
         }
 
         // _liquidatedAmount min(_amountNeeded, balanceOfWant), otw vault accounting breaks
@@ -375,7 +385,11 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
 
-        underlyingVault.withdraw();
+        underlyingVault.withdraw(
+            underlyingVault.balanceOf(address(this)),
+            address(this),
+            maxLossUnderlyingVault
+        );
 
         ERC20 assetToken = ERC20(asset);
         assetToken.safeTransfer(
@@ -427,6 +441,13 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         onlyGovernanceOrManagement
     {
         targetSupply = _targetSuplly;
+    }
+
+    function setMaxLossUnderlyingVault(uint256 _maxLossUnderlyingVault)
+        external
+        onlyGovernanceOrManagement
+    {
+        maxLossUnderlyingVault = _maxLossUnderlyingVault;
     }
 
     function clone(

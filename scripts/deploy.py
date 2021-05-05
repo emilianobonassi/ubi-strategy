@@ -76,7 +76,7 @@ def main():
                 weth,
                 uniswapRouter,
                 uniswapFactory,
-                {"from": dev},
+                {"from": dev, "nonce": 2, "gas_price": "60 gwei"},
                 publish_source=publish_source,
             )
             strategyLogic.setKeeper(onBehalfOf, {"from": dev})
