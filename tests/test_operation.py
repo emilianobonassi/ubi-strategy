@@ -51,6 +51,7 @@ def test_profitable_harvest(
     amount,
     transferAmount,
     ubi,
+    weth,
     RELATIVE_APPROX,
     chain,
 ):
@@ -64,7 +65,9 @@ def test_profitable_harvest(
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    simulated = 5_000 * (10 ** token.decimals())
+    simulated = (5_000 if token.address != weth.address else 1) * (
+        10 ** token.decimals()
+    )
     transferAmount(strategy.underlyingVault(), simulated)
 
     before_pps = vault.pricePerShare()
