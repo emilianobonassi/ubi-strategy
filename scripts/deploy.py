@@ -36,7 +36,6 @@ def main():
 
     if input("Is there a Vault for this strategy already? y/[N]: ").lower() == "y":
         vault = Vault.at(get_address("Deployed Vault: "))
-        assert vault.apiVersion() == API_VERSION
     else:
         print("You should deploy one vault using scripts from Vault project")
         return  # TODO: Deploy one using scripts from Vault project
@@ -65,6 +64,7 @@ def main():
     weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
     uniswapRouter = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
     uniswapFactory = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+    healthCheck = "0xDDCea799fF1699e98EDF118e0629A974Df7DF012"
 
     strategyLogic = ""
     if input("Is there a Strategy logic deployed? y/[N]: ").lower() != "y":
@@ -76,12 +76,14 @@ def main():
                 weth,
                 uniswapRouter,
                 uniswapFactory,
-                {"from": dev, "nonce": 2, "gas_price": "60 gwei"},
+                {"from": dev},
                 publish_source=publish_source,
             )
             strategyLogic.setKeeper(onBehalfOf, {"from": dev})
             strategyLogic.setRewards(onBehalfOf, {"from": dev})
             strategyLogic.setStrategist(onBehalfOf, {"from": dev})
+            strategyLogic.setHealthCheck(healthCheck, {"from": dev})
+            strategyLogic.setDoHealthCheck(True, {"from": dev})
             return
         else:
             return

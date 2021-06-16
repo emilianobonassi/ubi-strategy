@@ -16,7 +16,7 @@ def test_migration(
 
     # migrate to a new strategy
     new_strategy = strategyDeployer(vault)
-    strategy.migrate(new_strategy.address, {"from": gov})
+    vault.migrateStrategy(strategy, new_strategy, {"from": gov})
     assert (
         pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
         == amount

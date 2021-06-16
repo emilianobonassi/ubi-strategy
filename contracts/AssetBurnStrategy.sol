@@ -182,7 +182,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
                 .div(10**underlyingVault.decimals());
     }
 
-    function ethToWant(uint256 _amount) internal view returns (uint256) {
+    function ethToWant(uint256 _amount) public view override returns (uint256) {
         if (_amount == 0) {
             return 0;
         }
@@ -368,6 +368,22 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
             _liquidatedAmount = balanceOfWant;
             _loss = _amountNeeded.sub(balanceOfWant);
         }
+    }
+
+    /**
+     * Liquidate everything and returns the amount that got freed.
+     * This function is used during emergency exit instead of `prepareReturn()` to
+     * liquidate all of the Strategy's positions back to the Vault.
+     */
+
+    function liquidateAllPositions()
+        internal
+        override
+        returns (uint256 _amountFreed)
+    {
+        underlyingVault.withdraw();
+
+        _amountFreed = _balanceOfWant();
     }
 
     // NOTE: Can override `tendTrigger` and `harvestTrigger` if necessary

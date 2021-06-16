@@ -55,8 +55,8 @@ def token(Token, request):
 @pytest.fixture
 def transferAmount(accounts, token):
     tokenWhales = {
-        "0x6B175474E89094C44Da98b954EedeAC495271d0F": "0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE",
-        "0x57Ab1ec28D129707052df4dF418D58a2D46d5f51": "0x49BE88F0fcC3A8393a59d3688480d7D253C37D2A",
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
+        "0x57Ab1ec28D129707052df4dF418D58a2D46d5f51": "0x1f2c3a1046c32729862fcb038369696e3273a516",
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "0xf977814e90da44bfa03b6295a0616a897441acec",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
         "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x2f0b23f53734252bda2277357e97e1517d6b042a",
@@ -100,8 +100,13 @@ def uniswapFactory():
 
 
 @pytest.fixture
+def healthCheck(Contract):
+    yield Contract("0xDDCea799fF1699e98EDF118e0629A974Df7DF012")
+
+
+@pytest.fixture
 def weth_amout(user, weth):
-    weth_amout = 10 ** weth.decimals()
+    weth_amout = 10 * 1e18
     user.transfer(weth, weth_amout)
     yield weth_amout
 
@@ -143,6 +148,7 @@ def strategyDeployer(
     uniswapFactory,
     ubi,
     AssetBurnStrategy,
+    healthCheck,
     gov,
 ):
     def s(vault, proxy=True):
@@ -172,6 +178,8 @@ def strategyDeployer(
             )
 
         strategy.setTargetSupply(ubi.totalSupply() / 2, {"from": gov})
+        strategy.setHealthCheck(healthCheck, {"from": gov})
+        strategy.setDoHealthCheck(True, {"from": gov})
 
         return strategy
 
