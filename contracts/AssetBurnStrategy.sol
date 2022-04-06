@@ -34,9 +34,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
     address public asset;
     address public weth;
     address public uniswapRouterV2;
-    address public uniswapFactory;
-
-    address[] internal _path;
+    address public burner;
 
     uint256 constant MAX_BPS = 10000;
     uint256 public burningProfitRatio;
@@ -59,15 +57,9 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         address _asset,
         address _weth,
         address _uniswapRouterV2,
-        address _uniswapFactory
+        address _burner
     ) public BaseStrategyInitializable(_vault) {
-        _init(
-            _underlyingVault,
-            _asset,
-            _weth,
-            _uniswapRouterV2,
-            _uniswapFactory
-        );
+        _init(_underlyingVault, _asset, _weth, _uniswapRouterV2, _burner);
     }
 
     function init(
@@ -77,17 +69,11 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         address _asset,
         address _weth,
         address _uniswapRouterV2,
-        address _uniswapFactory
+        address _burner
     ) external {
         super._initialize(_vault, _onBehalfOf, _onBehalfOf, _onBehalfOf);
 
-        _init(
-            _underlyingVault,
-            _asset,
-            _weth,
-            _uniswapRouterV2,
-            _uniswapFactory
-        );
+        _init(_underlyingVault, _asset, _weth, _uniswapRouterV2, _burner);
     }
 
     function _init(
@@ -95,7 +81,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         address _asset,
         address _weth,
         address _uniswapRouterV2,
-        address _uniswapFactory
+        address _burner
     ) internal {
         require(
             address(want) == VaultAPI(_underlyingVault).token(),
@@ -107,22 +93,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
 
         weth = _weth;
         uniswapRouterV2 = _uniswapRouterV2;
-        uniswapFactory = _uniswapFactory;
-
-        if (
-            address(want) == weth ||
-            address(want) == 0x6B175474E89094C44Da98b954EedeAC495271d0F
-        ) {
-            _path = new address[](2);
-            _path[0] = address(want);
-            _path[1] = asset;
-        } else {
-            _path = new address[](3);
-            _path[0] = address(want);
-            _path[1] = weth;
-            _path[2] = asset;
-        }
-        ERC20(address(want)).safeApprove(_uniswapRouterV2, type(uint256).max);
+        burner = _burner;
 
         // initial burning profit ratio 50%
         burningProfitRatio = 5000;
@@ -252,53 +223,10 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
                     : 0; // supply <= targetSupply nothing to burn
 
             if (targetAssetToBurn > 0) {
-                // Check we have sufficient liquidity
-                IUniswapV2Factory factory = IUniswapV2Factory(uniswapFactory);
-                address pair =
-                    factory.getPair(
-                        _path[_path.length - 2],
-                        _path[_path.length - 1]
-                    );
-
-                require(pair != address(0), "Pair must exist to swap");
-
-                // Buy at most to empty the pool
-                uint256 pairAssetBalance = assetToken.balanceOf(pair);
-                targetAssetToBurn = Math.min(
-                    pairAssetBalance > 0
-                        ? pairAssetBalance.mul(50).div(100)
-                        : 0,
-                    targetAssetToBurn
-                );
-            }
-
-            if (targetAssetToBurn > 0) {
                 uint256 profitToConvert =
                     _profit.mul(burningProfitRatio).div(MAX_BPS);
 
-                IUniswapRouter router = IUniswapRouter(uniswapRouterV2);
-
-                uint256 expectedProfitToUse =
-                    (router.getAmountsIn(targetAssetToBurn, _path))[0];
-
-                // In the case profitToConvert > expected to use for burning target asset use the latter
-                // On the contrary use profitToConvert
-                uint256 exchangedAmount =
-                    (
-                        router.swapExactTokensForTokens(
-                            Math.min(profitToConvert, expectedProfitToUse),
-                            1,
-                            _path,
-                            address(this),
-                            now.add(1800)
-                        )
-                    )[0];
-
-                // TOBE CHECKED leverage uniswap returns want amount
-                _profit = _profit.sub(exchangedAmount);
-
-                // burn
-                assetToken.burn(assetToken.balanceOf(address(this)));
+                ERC20(address(asset)).safeTransfer(burner, profitToConvert);
             }
         }
 
@@ -474,7 +402,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
         address _asset,
         address _weth,
         address _uniswapRouterV2,
-        address _uniswapFactory
+        address _burner
     ) external returns (address newStrategy) {
         // Copied from https://github.com/optionality/clone-factory/blob/master/contracts/CloneFactory.sol
         bytes20 addressBytes = bytes20(address(this));
@@ -501,7 +429,7 @@ contract AssetBurnStrategy is BaseStrategyInitializable {
             _asset,
             _weth,
             _uniswapRouterV2,
-            _uniswapFactory
+            _burner
         );
 
         emit Cloned(newStrategy);
